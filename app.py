@@ -7,8 +7,9 @@ from instagrapi import Client
 import sqlite3
 import requests
 import os
+import itertools
 
-app = FastAPI(title="Instagram Panel App with IPstack & Device Fix")
+app = FastAPI(title="Instagram Panel App with IPstack & Proxies")
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,6 +21,26 @@ app.add_middleware(
 
 DB_FILE = "database.db"
 IPSTACK_KEY = "dcdfb3fe0dee0ca472518a429aeb8b4e"
+
+# Aapki di gayi 10 Proxies ki List (Format: http://username:password@ip:port)
+PROXY_LIST = [
+    "http://ciiburkf:bx2e51jn04tc@31.59.20.176:6754",
+    "http://ciiburkf:bx2e51jn04tc@31.56.127.193:7684",
+    "http://ciiburkf:bx2e51jn04tc@45.38.107.97:6014",
+    "http://ciiburkf:bx2e51jn04tc@198.105.121.200:6462",
+    "http://ciiburkf:bx2e51jn04tc@64.137.96.74:6641",
+    "http://ciiburkf:bx2e51jn04tc@198.23.243.226:6361",
+    "http://ciiburkf:bx2e51jn04tc@38.154.185.97:6370",
+    "http://ciiburkf:bx2e51jn04tc@84.247.60.125:6095",
+    "http://ciiburkf:bx2e51jn04tc@142.111.67.146:5611",
+    "http://ciiburkf:bx2e51jn04tc@191.96.254.138:6185"
+]
+
+# Proxy rotator pool
+proxy_pool = itertools.cycle(PROXY_LIST)
+
+def get_next_proxy():
+    return next(proxy_pool)
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -135,66 +156,66 @@ def home_page():
 
         <!-- JavaScript Logic -->
         <script>
-            async function checkMyIP() {{
-                try {{
+            async function checkMyIP() {
+                try {
                     const res = await fetch('/api/check-ip');
                     const data = await res.json();
                     document.getElementById('ip-status').innerText = `IP: ${{data.ip}} (${{data.city}}, ${{data.country}})`;
-                }} catch(e) {{
+                } catch(e) {
                     document.getElementById('ip-status').innerText = "IP check failed";
-                }}
-            }}
+                }
+            }
             checkMyIP();
 
-            async function loginUser() {{
+            async function loginUser() {
                 const username = document.getElementById('username').value;
                 const password = document.getElementById('password').value;
                 const statusEl = document.getElementById('login-status');
 
-                if(!username || !password) {{
+                if(!username || !password) {
                     statusEl.innerText = "Please enter username and password!";
                     statusEl.style.color = "red";
                     return;
-                }}
+                }
 
                 statusEl.innerText = "Logging in & saving to database...";
                 statusEl.style.color = "blue";
 
-                try {{
-                    const response = await fetch('/api/login', {{
+                try {
+                    const response = await fetch('/api/login', {
                         method: 'POST',
-                        headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{ username, password }})
-                    }});
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
                     const data = await response.json();
-                    if(response.ok) {{
+                    if(response.ok) {
                         statusEl.innerText = "Login Successful & Saved!";
                         statusEl.style.color = "green";
                         document.getElementById('display-username').innerText = data.username;
                         document.getElementById('coin-balance').innerText = data.coins;
                         document.getElementById('avatar-letter').innerText = data.username.charAt(0).toUpperCase();
                         loadAccounts();
-                    }} else {{
+                    } else {
                         statusEl.innerText = data.detail || "Login failed!";
                         statusEl.style.color = "red";
-                    }}
-                }} catch (err) {{
+                    }
+                } catch (err) {
                     statusEl.innerText = "Server error!";
                     statusEl.style.color = "red";
-                }}
-            }}
+                }
+            }
 
-            async function loadAccounts() {{
-                try {{
+            async function loadAccounts() {
+                try {
                     const res = await fetch('/api/accounts');
                     const data = await res.json();
                     const listEl = document.getElementById('accounts-list');
                     listEl.innerHTML = "";
-                    if(data.accounts.length === 0) {{
+                    if(data.accounts.length === 0) {
                         listEl.innerHTML = '<p class="text-xs text-gray-400 text-center py-2">No accounts found.</p>';
                         return;
-                    }}
-                    data.accounts.forEach(acc => {{
+                    }
+                    data.accounts.forEach(acc => {
                         listEl.innerHTML += `
                             <div class="flex items-center justify-between p-2 bg-gray-50 rounded-lg border">
                                 <div class="flex items-center space-x-2">
@@ -204,34 +225,34 @@ def home_page():
                                 <span class="text-xs text-yellow-600 font-semibold"><i class="fa-solid fa-coins"></i> ${{acc.coins}}</span>
                             </div>
                         `;
-                    }});
-                }} catch(e) {{ console.log(e); }}
-            }}
+                    });
+                } catch(e) { console.log(e); }
+            }
 
-            async function startAutomation() {{
+            async function startAutomation() {
                 const checkboxes = document.querySelectorAll('.acc-checkbox:checked');
                 const accounts = Array.from(checkboxes).map(cb => cb.value);
                 const targetUser = document.getElementById('target-user').value;
                 const taskStatus = document.getElementById('task-status');
 
-                if(accounts.length === 0 || !targetUser) {{
+                if(accounts.length === 0 || !targetUser) {
                     taskStatus.innerText = "Select at least one account and enter target user!";
                     taskStatus.style.color = "red";
                     return;
-                }}
+                }
 
                 taskStatus.innerText = "Running automation on selected accounts...";
                 taskStatus.style.color = "blue";
 
-                const res = await fetch('/api/start-task', {{
+                const res = await fetch('/api/start-task', {
                     method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{ accounts, target_user: targetUser }})
-                }});
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ accounts, target_user: targetUser })
+                });
                 const data = await res.json();
                 taskStatus.innerText = data.message;
                 taskStatus.style.color = "green";
-            }}
+            }
 
             loadAccounts();
         </script>
@@ -254,10 +275,15 @@ def check_ip():
     except Exception as e:
         return {"ip": "Error", "city": str(e), "country": ""}
 
-# 3. API: Login & Save to Database with Device Simulation Fix
+# 3. API: Login & Save to Database with Device Simulation & Proxy Fix
 @app.post("/api/login")
 def login_instagram(data: LoginRequest):
     cl = Client()
+    
+    # Proxy set karein
+    proxy = get_next_proxy()
+    cl.set_proxy(proxy)
+
     # Device simulation to bypass block/fake account-not-found errors
     cl.set_device({"app_version": "330.0.0.38.118", "android_version": 34, "android_model": "Pixel 7", "android_device": "panther", "cpu": "gs201"})
     
@@ -307,7 +333,7 @@ def get_accounts():
     accounts = [{"username": r[0], "coins": r[1], "followers": r[2]} for r in rows]
     return {"accounts": accounts}
 
-# 5. API: Run Automation for Selected Accounts
+# 5. API: Run Automation for Selected Accounts with Proxy Rotation
 @app.post("/api/start-task")
 def start_task(data: BatchTaskRequest):
     success_count = 0
@@ -316,12 +342,17 @@ def start_task(data: BatchTaskRequest):
         if os.path.exists(session_file):
             try:
                 cl = Client()
+                
+                # Task ke liye rotation proxy assign karein
+                proxy = get_next_proxy()
+                cl.set_proxy(proxy)
+
                 cl.set_device({"app_version": "330.0.0.38.118", "android_version": 34, "android_model": "Pixel 7", "android_device": "panther", "cpu": "gs201"})
                 cl.load_settings(session_file)
                 target_id = cl.user_id_by_username(data.target_user)
                 cl.user_follow(target_id)
                 success_count += 1
             except Exception as e:
-                print(f"Error for {username}: {str(e)}")
+                print(f"Error for {username} using proxy: {str(e)}")
                 
-    return {"status": "success", "message": f"Successfully completed task for {success_count} accounts!"}
+    return {"status": "success", "message": f"Successfully completed task for {success_count} accounts using proxies!"}
