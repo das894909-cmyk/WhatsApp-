@@ -9,7 +9,7 @@ import requests
 import os
 import itertools
 
-app = FastAPI(title="Instagram Panel App with Proxies")
+app = FastAPI(title="Instagram Panel App with Geonode Proxies")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,24 +22,43 @@ app.add_middleware(
 DB_FILE = "database.db"
 IPSTACK_KEY = "dcdfb3fe0dee0ca472518a429aeb8b4e"
 
-# Aapki di gayi 10 Proxies ki List
-PROXY_LIST = [
-    "http://ciiburkf:bx2e51jn04tc@31.59.20.176:6754",
-    "http://ciiburkf:bx2e51jn04tc@31.56.127.193:7684",
-    "http://ciiburkf:bx2e51jn04tc@45.38.107.97:6014",
-    "http://ciiburkf:bx2e51jn04tc@198.105.121.200:6462",
-    "http://ciiburkf:bx2e51jn04tc@64.137.96.74:6641",
-    "http://ciiburkf:bx2e51jn04tc@198.23.243.226:6361",
-    "http://ciiburkf:bx2e51jn04tc@38.154.185.97:6370",
-    "http://ciiburkf:bx2e51jn04tc@84.247.60.125:6095",
-    "http://ciiburkf:bx2e51jn04tc@142.111.67.146:5611",
-    "http://ciiburkf:bx2e51jn04tc@191.96.254.138:6185"
-]
+# Geonode API se live proxies fetch karne ka function
+def fetch_geonode_proxies():
+    proxy_list = []
+    api_url = "https://proxylist.geonode.com/api/proxy-list?page=1&limit=500&sort_by=responseTime&sort_type=asc"
+    try:
+        response = requests.get(api_url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            for item in data.get("data", []):
+                ip = item.get("ip")
+                port = item.get("port")
+                protocols = item.get("protocols", ["http"])
+                protocol = protocols[0] if protocols else "http"
+                if ip and port:
+                    proxy_str = f"{protocol}://{ip}:{port}"
+                    proxy_list.append(proxy_str)
+    except Exception as e:
+        print(f"Error fetching proxies from Geonode API: {e}")
+    
+    # Fallback proxies agar API fail ho jaye taaki app crash na ho
+    if not proxy_list:
+        proxy_list = [
+            "http://31.59.20.176:6754",
+            "http://45.38.107.97:6014"
+        ]
+    
+    return proxy_list
 
+# Proxies load karke cycle pool banana
+PROXY_LIST = fetch_geonode_proxies()
 proxy_pool = itertools.cycle(PROXY_LIST)
 
 def get_next_proxy():
-    return next(proxy_pool)
+    try:
+        return next(proxy_pool)
+    except Exception:
+        return None
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -232,7 +251,7 @@ def home_page():
 def check_ip():
     try:
         url = f"http://api.ipstack.com/check?access_key={IPSTACK_KEY}"
-        response = requests.get(url)
+        response = requests.get(url, timeout=5)
         data = response.json()
         return {
             "ip": data.get("ip", "Unknown"),
@@ -248,7 +267,8 @@ def login_instagram(data: LoginRequest):
     cl = Client()
     try:
         proxy = get_next_proxy()
-        cl.set_proxy(proxy)
+        if proxy:
+            cl.set_proxy(proxy)
     except Exception as e:
         print(f"Proxy setting failed: {e}")
 
@@ -310,7 +330,8 @@ def start_task(data: BatchTaskRequest):
                 cl = Client()
                 try:
                     proxy = get_next_proxy()
-                    cl.set_proxy(proxy)
+                    if proxy:
+                        cl.set_proxy(proxy)
                 except Exception as proxy_err:
                     print(f"Proxy error for task: {proxy_err}")
 
