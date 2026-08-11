@@ -8,7 +8,7 @@ import sqlite3
 import requests
 import os
 
-app = FastAPI(title="Instagram Panel App with IPstack")
+app = FastAPI(title="Instagram Panel App with IPstack & Device Fix")
 
 app.add_middleware(
     CORSMiddleware,
@@ -135,7 +135,6 @@ def home_page():
 
         <!-- JavaScript Logic -->
         <script>
-            // Check IP on load using backend IPstack API
             async function checkMyIP() {{
                 try {{
                     const res = await fetch('/api/check-ip');
@@ -255,10 +254,13 @@ def check_ip():
     except Exception as e:
         return {"ip": "Error", "city": str(e), "country": ""}
 
-# 3. API: Login & Save to Database
+# 3. API: Login & Save to Database with Device Simulation Fix
 @app.post("/api/login")
 def login_instagram(data: LoginRequest):
     cl = Client()
+    # Device simulation to bypass block/fake account-not-found errors
+    cl.set_device({"app_version": "330.0.0.38.118", "android_version": 34, "android_model": "Pixel 7", "android_device": "panther", "cpu": "gs201"})
+    
     session_file = f"session_{data.username}.json"
     
     try:
@@ -314,6 +316,7 @@ def start_task(data: BatchTaskRequest):
         if os.path.exists(session_file):
             try:
                 cl = Client()
+                cl.set_device({"app_version": "330.0.0.38.118", "android_version": 34, "android_model": "Pixel 7", "android_device": "panther", "cpu": "gs201"})
                 cl.load_settings(session_file)
                 target_id = cl.user_id_by_username(data.target_user)
                 cl.user_follow(target_id)
