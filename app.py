@@ -20,14 +20,13 @@ app.add_middleware(
 )
 
 DB_FILE = "database.db"
-IPSTACK_KEY = "dcdfb3fe0dee0ca472518a429aeb8b4e"
 
-# Geonode Proxy Pool Fetcher
+# Geonode Proxy Pool Fetcher with error handling
 def fetch_proxies():
     proxy_list = []
     try:
-        url = "https://proxylist.geonode.com/api/proxy-list?page=1&limit=200&sort_by=responseTime&sort_type=asc"
-        res = requests.get(url, timeout=5)
+        url = "https://proxylist.geonode.com/api/proxy-list?page=1&limit=50&sort_by=responseTime&sort_type=asc"
+        res = requests.get(url, timeout=3)
         if res.status_code == 200:
             data = res.json()
             for item in data.get("data", []):
@@ -39,12 +38,9 @@ def fetch_proxies():
                     proxy_list.append(f"{proto}://{ip}:{port}")
     except Exception as e:
         print("Proxy fetch error:", e)
-    
-    if not proxy_list:
-        proxy_list = ["http://31.59.20.176:6754"]
     return proxy_list
 
-PROXY_POOL = itertools.cycle(fetch_proxies())
+PROXY_POOL = itertools.cycle(fetch_proxies() or ["http://31.59.20.176:6754"])
 
 def get_proxy():
     try:
@@ -76,7 +72,7 @@ class TaskData(BaseModel):
     accounts: List[str]
     target_user: str
 
-# HTML UI (Pure string format - No f-string syntax conflict)
+# HTML UI
 @app.get("/", response_class=HTMLResponse)
 def index():
     return """
@@ -97,7 +93,7 @@ def index():
                 <input type="text" id="username" placeholder="Username" class="w-full p-2 border rounded">
                 <input type="password" id="password" placeholder="Password" class="w-full p-2 border rounded">
                 <button onclick="loginAcc()" class="w-full bg-blue-500 text-white p-2 rounded font-bold">Login & Save</button>
-                <p id="log-status" class="text-xs text-center"></p>
+                <p id="log-status" class="text-xs text-center font-semibold"></p>
             </div>
 
             <hr>
@@ -107,7 +103,7 @@ def index():
                 <div id="acc-list" class="max-h-32 overflow-y-auto border p-2 rounded text-xs">Loading...</div>
                 <input type="text" id="target" placeholder="Target Username" class="w-full p-2 border rounded">
                 <button onclick="startTask()" class="w-full bg-green-500 text-white p-2 rounded font-bold">Start Follow Task</button>
-                <p id="task-status" class="text-xs text-center"></p>
+                <p id="task-status" class="text-xs text-center font-semibold"></p>
             </div>
         </div>
 
@@ -123,7 +119,7 @@ def index():
                         return;
                     }
                     data.accounts.forEach(acc => {
-                        div.innerHTML += `<label class="block"><input type="checkbox" class="acc-chk" value="${acc.username}" checked> ${acc.username} (Coins: ${acc.coins})</label>`;
+                        div.innerHTML += `<label class="block mb-1"><input type="checkbox" class="acc-chk" value="${acc.username}" checked> ${acc.username} (Coins: ${acc.coins})</label>`;
                     });
                 } catch(e) { console.log(e); }
             }
@@ -132,20 +128,33 @@ def index():
                 let username = document.getElementById('username').value;
                 let password = document.getElementById('password').value;
                 let status = document.getElementById('log-status');
-                status.innerText = "Logging in...";
                 
-                let res = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({username, password})
-                });
-                let data = await res.json();
-                if(res.ok) {
-                    status.innerText = "Success!";
-                    status.style.color = "green";
-                    loadAccounts();
-                } else {
-                    status.innerText = data.detail || "Error";
+                if(!username || !password) {
+                    status.innerText = "Enter username and password!";
+                    status.style.color = "red";
+                    return;
+                }
+
+                status.innerText = "Logging in... Please wait.";
+                status.style.color = "blue";
+                
+                try {
+                    let res = await fetch('/api/login', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({username, password})
+                    });
+                    let data = await res.json();
+                    if(res.ok) {
+                        status.innerText = "Login Success & Saved!";
+                        status.style.color = "green";
+                        loadAccounts();
+                    } else {
+                        status.innerText = data.detail || "Login failed!";
+                        status.style.color = "red";
+                    }
+                } catch(err) {
+                    status.innerText = "Network error or timeout!";
                     status.style.color = "red";
                 }
             }
@@ -156,7 +165,15 @@ def index():
                 let target_user = document.getElementById('target').value;
                 let status = document.getElementById('task-status');
                 
-                status.innerText = "Running...";
+                if(accounts.length === 0 || !target_user) {
+                    status.innerText = "Select accounts and enter target!";
+                    status.style.color = "red";
+                    return;
+                }
+
+                status.innerText = "Running task...";
+                status.style.color = "blue";
+                
                 let res = await fetch('/api/start-task', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -164,6 +181,7 @@ def index():
                 });
                 let data = await res.json();
                 status.innerText = data.message;
+                status.style.color = "green";
             }
 
             loadAccounts();
@@ -184,19 +202,14 @@ def get_accounts():
 @app.post("/api/login")
 def login(data: LoginData):
     cl = Client()
-    p = get_proxy()
-    if p:
-        try:
-            cl.set_proxy(p)
-        except:
-            pass
-    
+    # Direct login without blocking proxy to ensure it doesn't freeze
     cl.set_device({"app_version": "330.0.0.38.118", "android_version": 34, "android_model": "Pixel 7", "android_device": "panther", "cpu": "gs201"})
     session_file = f"session_{data.username}.json"
     
     try:
         if os.path.exists(session_file):
             cl.load_settings(session_file)
+        
         cl.login(data.username, data.password)
         cl.dump_settings(session_file)
         
@@ -214,7 +227,10 @@ def login(data: LoginData):
         
         return {"status": "success", "username": data.username}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        error_msg = str(e)
+        if "challenge" in error_msg.lower() or "two_factor" in error_msg.lower():
+            raise HTTPException(status_code=400, detail="Instagram 2FA/Checkpoint required. Login via official app first.")
+        raise HTTPException(status_code=400, detail=f"Login Error: {error_msg}")
 
 @app.post("/api/start-task")
 def start_task(data: TaskData):
@@ -226,7 +242,10 @@ def start_task(data: TaskData):
                 cl = Client()
                 p = get_proxy()
                 if p:
-                    cl.set_proxy(p)
+                    try:
+                        cl.set_proxy(p)
+                    except:
+                        pass
                 cl.set_device({"app_version": "330.0.0.38.118", "android_version": 34, "android_model": "Pixel 7", "android_device": "panther", "cpu": "gs201"})
                 cl.load_settings(sf)
                 tid = cl.user_id_by_username(data.target_user)
