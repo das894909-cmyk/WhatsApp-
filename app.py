@@ -9,7 +9,7 @@ import requests
 import os
 import itertools
 
-app = FastAPI(title="Instagram Panel App with IPstack & Proxies")
+app = FastAPI(title="Instagram Panel App with Proxies")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,7 +22,7 @@ app.add_middleware(
 DB_FILE = "database.db"
 IPSTACK_KEY = "dcdfb3fe0dee0ca472518a429aeb8b4e"
 
-# Aapki di gayi 10 Proxies ki List (Format: http://username:password@ip:port)
+# Aapki di gayi 10 Proxies ki List
 PROXY_LIST = [
     "http://ciiburkf:bx2e51jn04tc@31.59.20.176:6754",
     "http://ciiburkf:bx2e51jn04tc@31.56.127.193:7684",
@@ -36,7 +36,6 @@ PROXY_LIST = [
     "http://ciiburkf:bx2e51jn04tc@191.96.254.138:6185"
 ]
 
-# Proxy rotator pool
 proxy_pool = itertools.cycle(PROXY_LIST)
 
 def get_next_proxy():
@@ -67,7 +66,7 @@ class BatchTaskRequest(BaseModel):
     accounts: List[str]
     target_user: str
 
-# 1. Frontend UI with IP Status Checker & Full Design
+# 1. Frontend UI
 @app.get("/", response_class=HTMLResponse)
 def home_page():
     return f"""
@@ -82,7 +81,6 @@ def home_page():
     </head>
     <body class="bg-blue-50 font-sans pb-24">
 
-        <!-- Top Header -->
         <div class="bg-[#007bff] text-white p-4 flex justify-between items-center shadow-md">
             <div class="flex items-center space-x-2">
                 <div class="w-10 h-10 rounded-full bg-white text-blue-600 flex items-center justify-center font-bold text-lg" id="avatar-letter">U</div>
@@ -97,10 +95,7 @@ def home_page():
             </div>
         </div>
 
-        <!-- Main Container -->
         <div class="max-w-md mx-auto p-4 space-y-4">
-
-            <!-- Add Account Card -->
             <div class="bg-white p-5 rounded-2xl shadow-md">
                 <h2 class="text-md font-bold text-gray-800 mb-3"><i class="fa-brands fa-instagram text-pink-600"></i> Add / Login Account</h2>
                 <div class="space-y-3">
@@ -111,7 +106,6 @@ def home_page():
                 <p id="login-status" class="text-center text-xs mt-2 text-gray-600"></p>
             </div>
 
-            <!-- Choose Accounts Section (Advance Mode) -->
             <div class="bg-white p-5 rounded-2xl shadow-md">
                 <div class="flex justify-between items-center mb-3">
                     <h3 class="font-bold text-gray-800 text-sm">Choose Accounts (Active)</h3>
@@ -126,35 +120,8 @@ def home_page():
                 </div>
                 <p id="task-status" class="text-center text-xs mt-2 text-gray-600"></p>
             </div>
-
-            <!-- Dashboard Menu Options -->
-            <div class="space-y-2">
-                <div class="bg-white p-3.5 rounded-xl shadow-sm flex justify-between items-center cursor-pointer">
-                    <div class="flex items-center space-x-3 text-blue-600 text-sm">
-                        <i class="fa-solid fa-file-invoice text-lg"></i>
-                        <span class="font-semibold text-gray-700">Submit Orders</span>
-                    </div>
-                    <i class="fa-solid fa-chevron-right text-gray-400 text-xs"></i>
-                </div>
-                <div class="bg-white p-3.5 rounded-xl shadow-sm flex justify-between items-center cursor-pointer">
-                    <div class="flex items-center space-x-3 text-blue-600 text-sm">
-                        <i class="fa-solid fa-cart-shopping text-lg"></i>
-                        <span class="font-semibold text-gray-700">Order For Others</span>
-                    </div>
-                    <i class="fa-solid fa-chevron-right text-gray-400 text-xs"></i>
-                </div>
-                <div class="bg-white p-3.5 rounded-xl shadow-sm flex justify-between items-center cursor-pointer">
-                    <div class="flex items-center space-x-3 text-blue-600 text-sm">
-                        <i class="fa-solid fa-gift text-lg"></i>
-                        <span class="font-semibold text-gray-700">Free Coins</span>
-                    </div>
-                    <i class="fa-solid fa-chevron-right text-gray-400 text-xs"></i>
-                </div>
-            </div>
-
         </div>
 
-        <!-- JavaScript Logic -->
         <script>
             async function checkMyIP() {
                 try {
@@ -260,7 +227,7 @@ def home_page():
     </html>
     """
 
-# 2. API: Check IP using IPstack API
+# 2. API: Check IP
 @app.get("/api/check-ip")
 def check_ip():
     try:
@@ -275,18 +242,17 @@ def check_ip():
     except Exception as e:
         return {"ip": "Error", "city": str(e), "country": ""}
 
-# 3. API: Login & Save to Database with Device Simulation & Proxy Fix
+# 3. API: Login
 @app.post("/api/login")
 def login_instagram(data: LoginRequest):
     cl = Client()
-    
-    # Proxy set karein
-    proxy = get_next_proxy()
-    cl.set_proxy(proxy)
+    try:
+        proxy = get_next_proxy()
+        cl.set_proxy(proxy)
+    except Exception as e:
+        print(f"Proxy setting failed: {e}")
 
-    # Device simulation to bypass block/fake account-not-found errors
     cl.set_device({"app_version": "330.0.0.38.118", "android_version": 34, "android_model": "Pixel 7", "android_device": "panther", "cpu": "gs201"})
-    
     session_file = f"session_{data.username}.json"
     
     try:
@@ -321,7 +287,7 @@ def login_instagram(data: LoginRequest):
             raise HTTPException(status_code=400, detail="Instagram 2FA/Checkpoint required. Please login via official app first.")
         raise HTTPException(status_code=400, detail=f"Login failed: {error_msg}")
 
-# 4. API: Get Saved Accounts List
+# 4. API: Get Accounts
 @app.get("/api/accounts")
 def get_accounts():
     conn = sqlite3.connect(DB_FILE)
@@ -333,7 +299,7 @@ def get_accounts():
     accounts = [{"username": r[0], "coins": r[1], "followers": r[2]} for r in rows]
     return {"accounts": accounts}
 
-# 5. API: Run Automation for Selected Accounts with Proxy Rotation
+# 5. API: Start Task
 @app.post("/api/start-task")
 def start_task(data: BatchTaskRequest):
     success_count = 0
@@ -342,10 +308,11 @@ def start_task(data: BatchTaskRequest):
         if os.path.exists(session_file):
             try:
                 cl = Client()
-                
-                # Task ke liye rotation proxy assign karein
-                proxy = get_next_proxy()
-                cl.set_proxy(proxy)
+                try:
+                    proxy = get_next_proxy()
+                    cl.set_proxy(proxy)
+                except Exception as proxy_err:
+                    print(f"Proxy error for task: {proxy_err}")
 
                 cl.set_device({"app_version": "330.0.0.38.118", "android_version": 34, "android_model": "Pixel 7", "android_device": "panther", "cpu": "gs201"})
                 cl.load_settings(session_file)
@@ -353,6 +320,6 @@ def start_task(data: BatchTaskRequest):
                 cl.user_follow(target_id)
                 success_count += 1
             except Exception as e:
-                print(f"Error for {username} using proxy: {str(e)}")
+                print(f"Error for {username}: {str(e)}")
                 
-    return {"status": "success", "message": f"Successfully completed task for {success_count} accounts using proxies!"}
+    return {"status": "success", "message": f"Successfully completed task for {success_count} accounts!"}
